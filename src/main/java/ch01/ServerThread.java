@@ -5,12 +5,10 @@ import java.net.*;
 import java.util.*;
 import java.text.*;
 
-public class Modoki01 {
-    // ルートの指定。IDEAの気持ちに合わせて指定している
+public class ServerThread implements Runnable {
     private static final String DOCUMENT_ROOT = "./src/HTML";
+    private Socket socket;
 
-
-    // InputStreamからのバイト列を、行単位で読み込むユーティリティメソッド
     private static String readLine(InputStream input) throws Exception {
         int ch;
         String ret = "";
@@ -29,7 +27,6 @@ public class Modoki01 {
         }
     }
 
-    // 1列の文字列を、バイト列としてOutputStreamに書き込むユーティリティメソッド
     private static void writeLine(OutputStream output, String str)
             throws  Exception {
         for (char ch : str.toCharArray()) {
@@ -39,7 +36,6 @@ public class Modoki01 {
         output.write((int)'\n');
     }
 
-    // 現在時刻からHTTP標準に合わせてフォーマットされた日付文字列を返す
     private static String getDateStringUtc() {
         Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
         DateFormat df = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss",
@@ -48,32 +44,56 @@ public class Modoki01 {
         return df.format(cal.getTime()) + " GMT";
     }
 
-    public static void main(String[] argv) throws Exception {
-        // ポートを指定
-        try (ServerSocket server = new ServerSocket(8001)) {
-            Socket socket = server.accept();
+    // 拡張子とContent-Typeの対応票
+    private static final HashMap<String, String> contentTypeMap =
+            new HashMap<String, String>() {{
+                put("html", "text/html");
+                put("htm", "text/html");
+                put("txt", "text/plain");
+                put("css", "text/css");
+                put("png", "image/png");
+                put("jpg", "image/jpeg");
+                put("jpeg", "image/jpeg");
+                put("gif", "image/gif");
+            }
+            };
 
+    // 拡張子を受け取りContent-Typeを返す
+    private static String getContentType(String ext) {
+        String ret = contentTypeMap.get(ext.toLowerCase());
+        if (ret == null) {
+            return "application/octet-stream";
+        } else {
+            return ret;
+        }
+    }
+
+    @Override
+    public void run() {
+        OutputStream output;
+        try {
             InputStream input = socket.getInputStream();
 
             String line;
             String path = null;
+            String ext = null;
             while ((line = readLine(input)) != null) {
                 if (line.equals(""))
                     break;
                 if (line.startsWith("GET")) {
                     path = line.split(" ")[1];
+                    String[] tmp = path.split("\\.");
+                    ext = tmp[tmp.length - 1];
                 }
             }
-            // レスポンスヘッダを返す
-            OutputStream output = socket.getOutputStream();
+            output = socket.getOutputStream();
             writeLine(output, "HTTP/1.1 200 OK");
             writeLine(output, "Date: " + getDateStringUtc());
             writeLine(output, "Server: Modoki/0.1");
             writeLine(output, "Connection: close");
-            writeLine(output, "Content-type: text/html");
+            writeLine(output, "Content-Type: " + getContentType(ext));
             writeLine(output, "");
 
-            // レスポンスボディを返す
             try (FileInputStream fis
                          = new FileInputStream(DOCUMENT_ROOT + path);) {
                 int ch;
@@ -81,9 +101,18 @@ public class Modoki01 {
                     output.write(ch);
                 }
             }
-            socket.close();
         } catch (Exception ex) {
             ex.printStackTrace();
+        } finally {
+            try {
+                socket.close();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
         }
+    }
+
+    ServerThread(Socket socket) {
+        this.socket = socket;
     }
 }
