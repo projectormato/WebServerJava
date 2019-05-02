@@ -1,0 +1,17 @@
+package main.java.ch02;
+
+import java.net.*;
+
+public class Main {
+    public static void main(String[] argv) throws Exception {
+        try (ServerSocket server = new ServerSocket(8001)) {
+            while (true) {
+                Socket socket = server.accept();
+
+                ServerThread serverThread = new ServerThread(socket);
+                Thread thread = new Thread(serverThread);
+                thread.start();
+            }
+        }
+    }
+}
